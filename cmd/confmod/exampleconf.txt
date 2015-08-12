@@ -1,0 +1,24 @@
+# exampleconf.txt
+# device(HEX), parameter(string), value(int32)
+
+EEA2, Latitude, 100
+EEA2, Longitude, 200
+EEA2, Elevation, 3
+EEA2, UtmX, 201
+EEA2, UtmY, 202
+EEA2, UtmZone, 35
+EEA2, UtmBand, 86
+EEA2, Yaw, 45
+EEA2, Pitch, 0
+EEA2, Roll, 0
+
+0A5A, Latitude, 1001
+0A5A, Longitude, 2002
+0A5A, Elevation, 3
+0A5A, UtmX, 203
+0A5A, UtmY, 204
+0A5A, UtmZone, 35
+0A5A, UtmBand, 86
+0A5A, Yaw, -45
+0A5A, Pitch, 0
+0A5A, Roll, 0

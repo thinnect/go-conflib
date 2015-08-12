@@ -1,0 +1,13 @@
+# conflist.txt
+# name(string), id(HEX)
+
+Latitude, 01
+Longitude, 02
+Elevation, 03
+UtmX, 04
+UtmY, 05
+UtmZone, 06
+UtmBand, 07
+Yaw, 08
+Pitch, 09
+Roll, 0A
