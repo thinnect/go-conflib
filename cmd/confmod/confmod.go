@@ -135,7 +135,7 @@ type Options struct {
 	ShowVersion func() `short:"V" long:"version" description:"Show application version"`
 }
 
-func main() {
+func mainfunction() int {
 
 	var opts Options
 	opts.ShowVersion = func() {
@@ -152,19 +152,20 @@ func main() {
 	_, err := flags.Parse(&opts)
 	if err != nil {
 		fmt.Printf("Argument parser error: %s\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	host, port, err := sfconnection.ParseSfConnectionString(opts.Positional.ConnectionString)
 	if err != nil {
 		fmt.Printf("ERROR: %s\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	sfc := sfconnection.NewSfConnection()
 	cpm := conflib.NewConfParameterManager(sfc, opts.Source, opts.Group)
 	cpm.SetRetries(0)
 	cpm.SetTimeout(time.Duration(opts.Timeout) * time.Second)
+	defer cpm.Close()
 
 	logger := logsetup(len(opts.Debug))
 	if len(opts.Debug) > 0 {
@@ -180,7 +181,7 @@ func main() {
 		}
 	} else {
 		logger.Error.Printf("Conflist parsing failed %s\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	// Parse parameters
@@ -192,74 +193,92 @@ func main() {
 			err = sfc.Connect(host, port)
 			if err != nil {
 				logger.Error.Printf("Unable to connect to %s:%d\n", host, port)
-				os.Exit(1)
+				return 1
 			}
 			logger.Info.Printf("Connected to %s:%d\n", host, port)
+			defer sfc.Disconnect()
 
 			// Configure targets
-			for target, params := range paramlist {
-				logger.Debug.Printf("Target %v has %d parameters\n", target, len(params))
-				logger.Info.Printf("Configuring %v\n", target)
+			for len(paramlist) > 0 {
+				for target, params := range paramlist {
+					logger.Debug.Printf("Target %v has %d parameters\n", target, len(params))
+					logger.Info.Printf("Configuring %v\n", target)
 
-				for name, value := range params {
-					nextnode := false
+					for name, value := range params {
+						nextnode := false
 
-					if pvalue, err := strconv.ParseInt(value, 10, 32); err == nil {
-						ivalue := int32(pvalue)
+						if pvalue, err := strconv.ParseInt(value, 10, 32); err == nil {
+							ivalue := int32(pvalue)
 
-						next := false
-						for next != true {
+							next := false
+							for next != true {
 
-							if current, err := cpm.GetValue(target, name); err == nil {
-								cvalue, _ := bytesToInt32(current.Value)
-								if opts.Get == false && cvalue != ivalue {
-									logger.Info.Printf("  %-10s: %d -> %d\n", name, cvalue, ivalue)
-									err := cpm.SetValue(target, name, int32ToBytes(ivalue))
-									if err == nil {
-										next = true
+								if current, err := cpm.GetValue(target, name); err == nil {
+									cvalue, _ := bytesToInt32(current.Value)
+									if opts.Get == false && cvalue != ivalue {
+										logger.Info.Printf("  %-10s: %d -> %d\n", name, cvalue, ivalue)
+										err := cpm.SetValue(target, name, int32ToBytes(ivalue))
+										if err == nil {
+											next = true
+											delete(params, name)
+										} else {
+											logger.Info.Printf("  %-10s error: %v\n", name, err)
+										}
 									} else {
-										logger.Info.Printf("  %-10s error: %v\n", name, err)
+										logger.Info.Printf("  %-10s: %d\n", name, cvalue)
+										next = true
+										delete(params, name)
 									}
 								} else {
-									logger.Info.Printf("  %-10s: %d\n", name, cvalue)
-									next = true
+									logger.Info.Printf("  %-10s error: %v\n", name, err)
 								}
-							} else {
-								logger.Info.Printf("  %-10s error: %v\n", name, err)
+
+								if next == false {
+									logger.Info.Printf("  (l)ater/(s)kip/(n)next/(d)rop/(a)bort? [retry]")
+									var input string
+									fmt.Scanln(&input)
+									if input == "a" || input == "A" {
+										return 1
+									} else if input == "l" || input == "L" {
+										next = true
+									} else if input == "s" || input == "S" {
+										delete(params, name)
+										next = true
+									} else if input == "n" || input == "N" {
+										nextnode = true
+										next = true
+									} else if input == "d" || input == "D" {
+										delete(paramlist, target)
+										nextnode = true
+										next = true
+									}
+								}
+
 							}
 
-							if next == false {
-								logger.Info.Printf("  (s)kip/(n)extnode/(a)bort? [retry]")
-								var input string
-								fmt.Scanln(&input)
-								if input == "a" || input == "A" {
-									os.Exit(1)
-								} else if input == "s" || input == "S" {
-									next = true
-								} else if input == "n" || input == "N" {
-									next = true
-									nextnode = true
-								}
-							}
-
+						} else {
+							logger.Error.Printf("  %-10s value %s cannot be used!\n", name, value)
 						}
-					} else {
-						logger.Error.Printf("  %-10s value %s cannot be used!\n", name, value)
+
+						if nextnode {
+							break
+						}
 					}
-					if nextnode {
-						break
+
+					if len(params) == 0 {
+						delete(paramlist, target)
 					}
+
 				}
 			}
 		}
 	} else {
 		logger.Error.Printf("List parsing failed %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
-	cpm.Close()
-	sfc.Disconnect()
 	time.Sleep(100 * time.Millisecond)
+	return 0
 }
 
 func logsetup(debuglevel int) *loggers.DIWEloggers {
@@ -279,4 +298,8 @@ func logsetup(debuglevel int) *loggers.DIWEloggers {
 	logger.SetWarningLogger(log.New(os.Stdout, "WARN:  ", logformat))
 	logger.SetErrorLogger(log.New(os.Stdout, "ERROR: ", logformat))
 	return logger
+}
+
+func main() {
+	os.Exit(mainfunction())
 }
